@@ -1,0 +1,5 @@
+global-exclude *
+graft src
+graft requirements
+include README.md
+include setup.py
