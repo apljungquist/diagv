@@ -1,5 +1,6 @@
 global-exclude *
 graft src
 graft requirements
+include pyproject.toml
 include README.md
 include setup.py
