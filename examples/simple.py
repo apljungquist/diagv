@@ -11,42 +11,56 @@ Message----------------------+------------+
                                                       +-Greeting
 """
 import dataclasses
+import datetime
 import logging
 import os
-from typing import Optional, get_type_hints
+import pathlib
+from typing import Optional, Type, TypeVar, Union, get_type_hints
 
 import fire
 
 from rappf import art, dag
 
+_T = TypeVar("_T")
+
 
 @dataclasses.dataclass
-class Time:
+class JsonMixin:
+    @classmethod
+    def from_json(cls: Type[_T], obj: dag.JsonAnyT) -> _T:
+        return cls(**obj)  # type: ignore
+
+    def to_json(self) -> dag.JsonAnyT:
+        return dataclasses.asdict(self)
+
+
+@dataclasses.dataclass
+class Time(JsonMixin):
     v: str
 
 
 @dataclasses.dataclass
-class Message:
+class Message(JsonMixin):
     v: str
 
 
 @dataclasses.dataclass
-class MarkAllRead:
+class MarkAllRead(JsonMixin):
     ...
 
 
 @dataclasses.dataclass
-class NumUnread:
+class NumUnread(JsonMixin):
     v: int
 
 
 @dataclasses.dataclass
-class MostRecent:
+class MostRecent(JsonMixin):
     v: str
 
 
 @dataclasses.dataclass
-class Greeting:
+class Greeting(JsonMixin):
     v: str
 
 
@@ -100,6 +114,9 @@ def _dict_zip(left, right):
 
 
 class Debugger:
+    def __init__(self):
+        self.greetings = []
+
     def __call__(
         self,
         *,
@@ -110,6 +127,8 @@ class Debugger:
         num_unread: Optional[NumUnread] = None,
         greeting: Optional[Greeting] = None,
     ) -> None:
+        self.greetings.append(greeting)
+        print("=" * 88)
         for name, hint, value in _dict_zip(get_type_hints(self.__call__), locals()):
             print(f"{name}: {hint} = {value}")
 
@@ -121,8 +140,7 @@ def _engine(debugger):
     return dag.DAG(funcs, lambda: None, expected_sources=[Time, Message, MarkAllRead])
 
 
-def run():
-    engine = _engine(Debugger())
+def run(location: Union[None, str, pathlib.Path] = None) -> None:
     updates = [
         [
             Time("09.00"),
@@ -146,12 +164,30 @@ def run():
             Message("Bonjour"),
         ],
     ]
+    if location is None:
+        location = pathlib.Path().cwd() / datetime.datetime.now().strftime(
+            "%Y%m%d_%HM%s"
+        )
+    else:
+        location = pathlib.Path(location)
 
-    for update in updates:
-        print("=" * 88)
-        print(update)
-        print()
-        engine(*update)
+    location.mkdir()
+    debuggers = [Debugger() for _ in range(3)]
+    _engine(debuggers[0]).run(updates)
+    _engine(debuggers[1]).run(
+        updates,
+        capture=[Time, MostRecent, NumUnread],
+        no_cut_ok=True,
+        location=location,
+    )
+    _engine(debuggers[2]).run(
+        replay=[Time, MostRecent, NumUnread],
+        no_cut_ok=True,
+        location=location,
+    )
+    # The sinks (indeed all nodes downsteam of A cut) should see the same states
+    # regardless of how the app is run.
+    assert debuggers[0].greetings == debuggers[1].greetings == debuggers[2].greetings
 
 
 def visualize():

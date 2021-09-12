@@ -4,9 +4,12 @@ Models app as a directed acyclic graph (DAG) in which
 * data types are the nodes, and
 * functions are the edges, each function can represent one or more edges.
 """
+import contextlib
 import graphlib
 import itertools
+import json
 import logging
+import pathlib
 from typing import (
     Any,
     Callable,
@@ -36,17 +39,17 @@ _AdjacencyListT = Mapping[_HashableT, Iterable[_HashableT]]
 _JsonObjectT = Dict[str, Any]
 _JsonListT = List[Any]
 _JsonSimpleT = Union[bool, float, int, None, str]
-_JsonAnyT = Union[_JsonObjectT, _JsonListT, _JsonSimpleT]
+JsonAnyT = Union[_JsonObjectT, _JsonListT, _JsonSimpleT]
 
 
 class _SupportsToJsonP(Protocol):
-    def to_json(self) -> _JsonAnyT:
+    def to_json(self) -> JsonAnyT:
         ...
 
 
 class _SupportsFromJsonP(Protocol):
     @classmethod
-    def from_json(cls: Type[_T], obj: _JsonAnyT) -> _T:
+    def from_json(cls: Type[_T], obj: JsonAnyT) -> _T:
         ...
 
 
@@ -127,7 +130,7 @@ class DAG:
     def predecessors_list(self) -> _AdjacencyListT[Any]:
         return self._predecessors_lists
 
-    def _call_func(self, func, state):
+    def _update_node(self, func, state):
         call = func.__call__
         kwdefaults = call.__kwdefaults__ or {}
 
@@ -151,20 +154,136 @@ class DAG:
 
         return func(**available)
 
-    def __call__(self, *objs):
+    def _update_graph(self, objs):
         sorter = graphlib.TopologicalSorter(self._predecessors_lists)
         sorter.prepare()
 
-        done = {type(obj): obj for obj in objs}
+        done = {cls: obj for cls, obj in objs.items()}
         for cls in sorter.get_ready():
             done.setdefault(cls, None)
             sorter.done(cls)
 
         while sorter.is_active():
             for cls in sorter.get_ready():
-                func = self._providers[cls]
-                obj = self._call_func(func, done)
-                done[cls] = obj
+                if cls not in done:
+                    func = self._providers[cls]
+                    obj = self._update_node(func, done)
+                    done[cls] = obj
                 sorter.done(cls)
 
         assert set(done) == self._nodes
+        return done
+
+    def run(
+        self,
+        updates: Optional[Iterable[Any]] = None,
+        replay: Iterable[Type[_SupportsFromJsonP]] = (),
+        capture: Iterable[Type[_SupportsToJsonP]] = (),
+        no_cut_ok: bool = False,
+        location: Optional[pathlib.Path] = None,
+    ) -> None:
+        """Run the DAG
+
+        :param updates: Updates to be applied, not from cache.
+        :param capture: Nodes to write to cache.
+        :param replay: Nodes to read from cache.
+        :param no_cut_ok: If False, raise an error if either capture or replay is set
+            and do not cause a cut.
+        """
+        if (capture or replay) and no_cut_ok is False:
+            raise NotImplementedError
+
+        if (capture or replay) and location is None:
+            raise ValueError("Must provide a location for capture and/or replay")
+
+        if capture and replay:
+            raise NotImplementedError
+
+        if replay and updates:
+            raise NotImplementedError
+
+        with contextlib.ExitStack() as stack:
+            if capture:
+                assert location is not None
+                writer = stack.enter_context(_Writer(capture, location))
+            else:
+                writer = None
+
+            if replay:
+                assert updates is None
+                assert location is not None
+                seeds = stack.enter_context(_Reader(replay, location))
+            else:
+                assert updates is not None
+                seeds = ({type(obj): obj for obj in update} for update in updates)
+
+            for seed in seeds:
+                state = self._update_graph(seed)
+                writer and writer(state)
+
+
+class _Writer:
+    def __init__(
+        self, nodes: Iterable[Type[_SupportsToJsonP]], location: pathlib.Path
+    ) -> None:
+        self._location = location
+        self._nodes = list(nodes)
+        self._files = {}  # type: ignore
+
+    def __enter__(self):
+        for node in self._nodes:
+            reg_path = (self._location / node.__name__).with_suffix(".jsonl")
+            self._files[node] = reg_path.open("x")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for file in self._files.values():
+            file.close()
+
+    def __call__(
+        self, state: Mapping[Type[_SupportsToJsonP], _SupportsToJsonP]
+    ) -> None:
+        for node in self._nodes:
+            obj = state[node]
+            file = self._files[node]
+            file.write(json.dumps(None if obj is None else obj.to_json()))
+            file.write("\n")
+
+
+def _maybe_from_json(
+    cls: Type[_SupportsFromJsonP], jsn: JsonAnyT
+) -> Optional[_SupportsFromJsonP]:
+    if jsn is None:
+        return None
+    return cls.from_json(jsn)
+
+
+class _Reader:
+    def __init__(
+        self, nodes: Iterable[Type[_SupportsFromJsonP]], location: pathlib.Path
+    ) -> None:
+        self._location = location
+        self._nodes = list(nodes)
+        self._files = {}  # type: ignore
+
+    def __enter__(self):
+        for node in self._nodes:
+            reg_path = (self._location / node.__name__).with_suffix(".jsonl")
+            self._files[node] = reg_path.open()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for file in self._files.values():
+            file.close()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        lines = {node: self._files[node].readline() for node in self._nodes}
+        if not all(lines.values()):
+            raise StopIteration
+        return {
+            node: _maybe_from_json(node, json.loads(line))
+            for node, line in lines.items()
+        }
