@@ -6,6 +6,9 @@ The primary goal of this package is to facilitate building data processing apps 
 * Intelligibility - it is easy to understand what the app will do
 * Replayability - the app behavior can be reproduced using data captured in previous runs
 
+## Usage
+Look in `examples/simple.py` for a toy simple app that demonstrates how the package can be used.
+
 ## Problems
 Many opportunities for improvement can be foreseen but have not been implemented because
 * a lack of time,

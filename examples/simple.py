@@ -1,4 +1,15 @@
 #!/usr/bin/env python3
+"""A simple app that counts unread messages.
+
+When visualized its DAG looks something like
+
+Message----------------------+------------+
+          MarkAllRead--------|------------+
+                        Time-|------------|-----------+
+                             +-MostRecent-|-----------+
+                                          +-NumUnread-+
+                                                      +-Greeting
+"""
 import dataclasses
 from typing import Optional, get_type_hints
 
