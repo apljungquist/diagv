@@ -6,6 +6,7 @@ Models app as a directed acyclic graph (DAG) in which
 """
 import graphlib
 import itertools
+import logging
 from typing import (
     Any,
     Callable,
@@ -14,6 +15,7 @@ from typing import (
     Iterable,
     List,
     Mapping,
+    Optional,
     Protocol,
     Sequence,
     Set,
@@ -24,6 +26,8 @@ from typing import (
     get_origin,
     get_type_hints,
 )
+
+logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
 _HashableT = TypeVar("_HashableT", bound=Hashable)
@@ -90,7 +94,12 @@ def _providers(funcs: Iterable[Any]) -> Dict[Any, Any]:
 
 
 class DAG:
-    def __init__(self, funcs: Sequence[Any], on_stale_predecessor: Callable[[], Any]):
+    def __init__(
+        self,
+        funcs: Sequence[Any],
+        on_stale_predecessor: Callable[[], Any],
+        expected_sources: Optional[Iterable[Any]] = None,
+    ):
         if any(func.__call__.__defaults__ for func in funcs):
             raise ValueError("Any default arguments must be for keyword only arguments")
 
@@ -98,6 +107,21 @@ class DAG:
         self._predecessors_lists = _predecessors_list(funcs)
         self._on_stale_predecessor = on_stale_predecessor
         self._nodes: Set[Any] = _nodes(self._predecessors_lists)
+
+        # Help users sanity check their configuration
+        if expected_sources is not None:
+            expected_sources = set(expected_sources)
+            actual_sources = set(
+                node for node in self._nodes if not self._providers.get(node, [])
+            )
+            if actual_sources != expected_sources:
+                extra = actual_sources - expected_sources
+                missing = expected_sources - actual_sources
+                if extra:
+                    logger.debug("Unexpected sources found: %s", extra)
+                if missing:
+                    logger.debug("Expected sources not found: %s", missing)
+                raise ValueError("Actual sources do not match expected sources")
 
     @property
     def predecessors_list(self) -> _AdjacencyListT[Any]:

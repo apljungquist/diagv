@@ -11,6 +11,8 @@ Message----------------------+------------+
                                                       +-Greeting
 """
 import dataclasses
+import logging
+import os
 from typing import Optional, get_type_hints
 
 import fire
@@ -116,7 +118,7 @@ def _engine(debugger):
     funcs = [NumUnread0(), MostRecent0(), Greeting0("Alice")]
     if debugger is not None:
         funcs.append(debugger)
-    return dag.DAG(funcs, lambda: None)
+    return dag.DAG(funcs, lambda: None, expected_sources=[Time, Message, MarkAllRead])
 
 
 def run():
@@ -160,4 +162,5 @@ def visualize():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging._nameToLevel[os.environ.get("LEVEL", "WARNING")])
     fire.Fire({func.__name__: func for func in [visualize, run]})
