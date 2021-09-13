@@ -9,13 +9,8 @@ The primary goal of this package is to facilitate building data processing apps 
 ## Usage
 Look in `examples/simple.py` for a toy simple app that demonstrates how the package can be used.
 
-## Problems
-Many opportunities for improvement can be foreseen but have not been implemented because
-* a lack of time,
-* insufficient value, or
-* excessive cost.
-
-This section documents what they are and some ideas around how to implement them.
+## Deficiencies
+This section documents foreseen deficiencies and ideas around if and how they can be addressed 
 
 ### Shared, mutable state
 If a node mutates its inputs it may affect other nodes that also received the same input.
@@ -32,3 +27,13 @@ If the latency for one node exceeds the update interval then the graph cannot ke
 When the engine mediates it can start the next update before the previous has completed while preserving causality.
 It could even buffer the data if the latency is much higher than the interval.
 However, concurrency increases the risk of bugs if functions have shared, mutable state.
+
+### Lookahead
+Functions are expected to take one input and produce zero or one output.
+This make it impossible to implement some functions in the framework.
+Solving the lookahead problem implies solving also the latency problem.
+
+One half-baked idea for how to solve this is for functions to yield their result.
+Yielding nothing tells the framework that the node is not done and downstream computation may not continue.
+This makes the model harder to understand and adds another opportunity for the user to implement bugs.
+User error could be mitigated by requiring that no function provides data in the future, i.e. yields more items than it has received.
