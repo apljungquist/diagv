@@ -4,10 +4,10 @@
 #
 #    tox --requirements-file requirements/tox.txt
 #
-black     # from format
+black     # from formatting
 build     # from build
-coverage  # from py
-mypy      # from types
-pylint    # from lint
-pytest    # from lint, py, types
+coverage  # from cov-html, py
+flake8    # from linting
+mypy      # from typing
+pytest    # from linting, py, typing
 twine     # from build

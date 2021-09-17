@@ -3,7 +3,7 @@ from typing import Mapping, Sequence
 
 import setuptools
 
-DISTRIBUTION_PACKAGE_NAME = INSTALL_PACKAGE_NAME = "rappf"
+DISTRIBUTION_PACKAGE_NAME = INSTALL_PACKAGE_NAME = "diagv"
 
 FILE = pathlib.Path(__file__)
 REQUIREMENTS = FILE.parent / "requirements"
@@ -53,5 +53,5 @@ setuptools.setup(
     package_dir={"": "src"},
     packages=setuptools.find_packages("src"),
     python_requires=">=3.9",
-    url="https://github.com/apljungquist/rappf",
+    url="https://github.com/apljungquist/diagv",
 )
