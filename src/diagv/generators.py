@@ -6,10 +6,11 @@ from diagv import misc
 def dibull():
     return misc.digraph(
         {
-            "0": "1",
-            "1": "23",
-            "2": "3",
-            "3": "4",
+            0: [1],
+            1: [2, 3],
+            2: [3],
+            3: [4],
+            4: [],
         }
     )
 
@@ -20,7 +21,7 @@ def diline(n):
 
 def distar(n):
     if n < 0:
-        return nx.freeze(nx.DiGraph([(i + 1, 0) for i in range(-n)]))
+        return nx.DiGraph([(i + 1, 0) for i in range(-n)])
     return nx.DiGraph([(0, i + 1) for i in range(n)])
 
 
@@ -54,4 +55,20 @@ def ditutte():
             (head, tail) if order.index(head) < order.index(tail) else (tail, head)
             for (head, tail) in graph.edges
         ]
+    )
+
+
+def a_ring():
+    return misc.digraph(
+        {
+            "A": "BE",
+            "B": "",
+            "C": "G",
+            "D": "E",
+            "E": "I",
+            "F": "E",
+            "G": "A",
+            "H": "",
+            "I": "CH",
+        }
     )

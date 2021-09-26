@@ -12,4 +12,4 @@ def raise_for_cyclic(digraph: nx.DiGraph) -> None:
         nx.find_cycle(digraph)
     except nx.NetworkXNoCycle:
         return
-    NotImplementedError("Only DAGs are supported so far")
+    raise NotImplementedError("Only DAGs are supported so far")

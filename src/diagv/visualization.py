@@ -29,12 +29,6 @@ def text_art(
     if ordering is None:
         ordering = list(nx.topological_sort(digraph))
 
-    for i, node in enumerate(ordering):
-        predecessors = set(ordering[:i])
-        conflicts = set(digraph.successors(node)) & predecessors
-        if conflicts:
-            raise ValueError(f"Ordering error at {node} for {conflicts}")
-
     cells = _cells(digraph, ordering)
     return "".join(_fmt_cells(cells, fmt))
 
@@ -67,6 +61,47 @@ def _above_has_successor_to_the_right(
         return col < max(successors)
     except ValueError:
         return False
+
+
+def _above_has_dpred_to_the_right(
+    row: int,
+    col: int,
+    dpred_lists: Mapping[int, Iterable[int]],
+) -> bool:
+    predecessors = dpred_lists[col]
+    return bool(predecessors and row < max(predecessors))
+
+
+def _has_successor_to_the_right(
+    col: int,
+    successor_lists: Mapping[int, Iterable[int]],
+) -> bool:
+    successors = successor_lists[col]
+    return col < max(successors, default=col)
+
+
+def _has_successor_to_the_left(
+    col: int,
+    successor_lists: Mapping[int, Iterable[int]],
+) -> bool:
+    successors = successor_lists[col]
+    return max(successors, default=col) < col
+
+
+def _right_has_dsucc_before_this(
+    row: int,
+    col: int,
+    dsucc_lists: Mapping[int, Iterable[int]],
+) -> bool:
+    dsuccs = dsucc_lists[row]
+    return bool(dsuccs and min(dsuccs) <= col)
+
+
+def _should_strip_left(
+    col: int,
+    dpred_lists: Mapping[int, Iterable[int]],
+) -> bool:
+    return col == 0 and not dpred_lists[0]
 
 
 class Token(str):
@@ -103,38 +138,61 @@ def _cells(digraph: nx.DiGraph, order: Sequence[HashableT]) -> NDArray:
             predecessors = set(digraph.predecessors(col_node))
             col = j * 4
             if j < i:
-                if j:
-                    result[row, col + 0] = PADDING
-                    result[row, col + 1] = PADDING
-                else:
+                if _should_strip_left(j, predecessor_lists):
                     result[row, col + 0] = NOTHING
+                elif col_node in successors:
+                    result[row, col + 0] = INTERSECTION
+                elif _above_has_dpred_to_the_right(i, j, predecessor_lists):
+                    result[row, col + 0] = OVERPASS
+                elif _right_has_dsucc_before_this(i, j, successor_lists):
+                    result[row, col + 0] = SECTION
+                else:
+                    result[row, col + 0] = PADDING
+
+                if _should_strip_left(j, predecessor_lists):
                     result[row, col + 1] = NOTHING
-                result[row, col + 2] = PADDING
-                result[row, col + 3] = PADDING
+                elif _right_has_dsucc_before_this(i, j, successor_lists):
+                    result[row, col + 1] = SECTION
+                else:
+                    result[row, col + 1] = PADDING
+
+                if _right_has_dsucc_before_this(i, j, successor_lists):
+                    result[row, col + 2] = SECTION
+                    result[row, col + 3] = SECTION
+                else:
+                    result[row, col + 2] = PADDING
+                    result[row, col + 3] = PADDING
 
             elif i == j:
                 node = row_node
                 assert node == col_node
-                if predecessors:
-                    result[row, col + 0] = INTERSECTION
-                    result[row, col + 1] = SECTION
-                elif j:
-                    result[row, col + 0] = PADDING
-                    result[row, col + 1] = PADDING
-                else:
+                if _should_strip_left(j, predecessor_lists):
                     result[row, col + 0] = NOTHING
                     result[row, col + 1] = NOTHING
+                elif predecessors or _has_successor_to_the_left(j, successor_lists):
+                    if predecessors:
+                        result[row, col + 0] = INTERSECTION
+                    else:
+                        result[row, col + 0] = SECTION
+                    result[row, col + 1] = SECTION
+                elif _above_has_successor_to_the_right(i, j, successor_lists):
+                    result[row, col + 0] = PADDING
+                    result[row, col + 1] = PADDING
 
                 result[row, col + 2] = node
 
-                if successors:
+                if _has_successor_to_the_right(j, successor_lists):
                     result[row, col + 3] = SECTION
+                # elif _has_successor_to_the_left(j, successor_lists):
+                #     result[row, col + 3] = SECTION
                 elif _above_has_successor_to_the_right(i, j, successor_lists):
                     result[row, col + 3] = PADDING
                 else:
                     result[row, col + 3] = NOTHING
             else:
-                if row_node in predecessors:
+                if _should_strip_left(j, predecessor_lists):
+                    result[row, col + 0] = NOTHING
+                elif row_node in predecessors:
                     result[row, col + 0] = INTERSECTION
                 elif (
                     predecessors
@@ -148,16 +206,22 @@ def _cells(digraph: nx.DiGraph, order: Sequence[HashableT]) -> NDArray:
                 else:
                     result[row, col + 0] = NOTHING
 
-                if successors and j < max(map(node2position.__getitem__, successors)):
+                if _should_strip_left(j, predecessor_lists):
+                    result[row, col + 1] = NOTHING
+                elif successors and j < max(map(node2position.__getitem__, successors)):
                     result[row, col + 1] = SECTION
+                elif _above_has_successor_to_the_right(i, j, successor_lists):
+                    result[row, col + 1] = PADDING
+                else:
+                    result[row, col + 1] = NOTHING
+
+                if successors and j < max(map(node2position.__getitem__, successors)):
                     result[row, col + 2] = SECTION
                     result[row, col + 3] = SECTION
                 elif _above_has_successor_to_the_right(i, j, successor_lists):
-                    result[row, col + 1] = PADDING
                     result[row, col + 2] = PADDING
                     result[row, col + 3] = PADDING
                 else:
-                    result[row, col + 1] = NOTHING
                     result[row, col + 2] = NOTHING
                     result[row, col + 3] = NOTHING
 
