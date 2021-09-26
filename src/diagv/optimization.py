@@ -83,29 +83,29 @@ def marginal_cost(
     this: HashableT,
     after: FrozenSet[HashableT],
 ) -> int:
+    # Count the number of edges passing overhead that get longer as a result of
+    # placing this node here
+    extending = set(before)
+    extensions = [
+        len(graph.node2direct_predecessors[right] & extending) for right in after
+    ]
+
+    # Count the number of edges that cross other edges as a result of placing this
+    # node here. Ignore multiple edges that use the same crossing since more edges
+    # using the same crossing is more chaotic than a single edge using that crossing.
     node2position = {v: i for i, v in enumerate(before)}
     dpreds = graph.node2direct_predecessors[this]
     dpred_positions = [
         node2position[direct_predecessor] for direct_predecessor in dpreds
     ]
     first_dpred_pos = min(dpred_positions, default=len(before))
-    intermediate = [
-        (
-            len(graph.node2direct_successors[other] & after),
-            (first_dpred_pos < other_pos and other not in dpreds),
-        )
-        # Before is often longer than after since invocations with short before get
-        # cached. Is it possible to iterate over after instead? Equivalent complexity
-        # but should get rid of one python constant
-        for other_pos, other in enumerate(before)
-    ]
-    cost_from_other = sum(
-        [
-            num_extension + bool(num_extension) * extension_is_interaction
-            for num_extension, extension_is_interaction in intermediate
-        ]
+    interacting = set(before[first_dpred_pos:]) - dpreds
+    preds_on_left_of_node_on_right: Set[HashableT] = functools.reduce(
+        operator.or_, [graph.node2direct_predecessors[right] for right in after], set()
     )
-    return cost_from_other
+    interactions = preds_on_left_of_node_on_right & interacting
+
+    return sum(extensions) + len(interactions)
 
 
 @functools.lru_cache(maxsize=100_000)
