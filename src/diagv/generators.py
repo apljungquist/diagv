@@ -72,3 +72,39 @@ def a_ring():
             "I": "CH",
         }
     )
+
+
+def diagv():
+    return misc.digraph(
+        {
+            "D": "A",
+            "I": "AG",
+            "A": "V",
+            "G": "V",
+            "V": "",
+        }
+    )
+
+
+def diagv_butterfly_cyclic():
+    return misc.digraph(
+        {
+            "D": "A",
+            "I": "D",
+            "A": "IG",
+            "G": "V",
+            "V": "A",
+        }
+    )
+
+
+def diagv_butterfly_acyclic():
+    return misc.digraph(
+        {
+            "D": "AI",
+            "I": "A",
+            "A": "GV",
+            "G": "V",
+            "V": "",
+        }
+    )
